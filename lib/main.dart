@@ -1,12 +1,18 @@
+import 'dart:convert';
+
 import 'package:enable_notification/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:googleapis_auth/auth_io.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart' show rootBundle;
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Inicializa o Firebase em background
+  // Inicializa o Firebase em background\
+  await Firebase.initializeApp();
   print('Mensagem recebida em segundo plano: ${message.messageId}');
 }
 
@@ -16,7 +22,7 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   runApp(const MyApp());
 }
 
@@ -47,6 +53,50 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   final platform = const MethodChannel('com.example.silent_mode');
+  bool isSilentMode = false;
+
+  Future<String> getAccessToken() async {
+    // Carregar o arquivo JSON da chave da conta de serviço
+    String jsonKey = await rootBundle.loadString('assets/google-services.json');
+
+    // Crie as credenciais a partir do arquivo JSON
+    final credentials = ServiceAccountCredentials.fromJson(jsonKey);
+
+    // Autenticar-se e obter o token de acesso
+    final client = await clientViaServiceAccount(
+        credentials, ['https://www.googleapis.com/auth/firebase.messaging']);
+    // final authHeaders = await client.readHeaders();
+    return '';
+  }
+
+  Future<void> sendNotification(String token, String title, String body) async {
+    const url = 'https://fcm.googleapis.com/fcm/send';
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization':
+          'key=YOUR_SERVER_KEY' // Substitua pela chave do servidor FCM
+    };
+
+    final payload = {
+      'to': token,
+      'notification': {
+        'title': title,
+        'body': body,
+      },
+    };
+
+    final response = await http.post(
+      Uri.parse(url),
+      headers: headers,
+      body: json.encode(payload),
+    );
+
+    if (response.statusCode == 200) {
+      print('Notificação enviada com sucesso');
+    } else {
+      print('Erro ao enviar notificação');
+    }
+  }
 
   Future<void> requestDoNotDisturbPermission() async {
     if (await Permission.accessNotificationPolicy.isDenied) {
@@ -111,7 +161,12 @@ class _MyHomePageState extends State<MyHomePage> {
               height: 12,
             ),
             InkWell(
-              onTap: () => setSilentMode(true),
+              onTap: () {
+                setState(() {
+                  isSilentMode = !isSilentMode;
+                });
+                setSilentMode(isSilentMode);
+              },
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(vertical: 8, horizontal: 28),
